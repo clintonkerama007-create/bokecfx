@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bokecfx - Trade Forex, Gold & Volatility</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:Arial;background:#0a0e17;color:white;margin:0}
+header{background:#111827;padding:14px;display:flex;justify-content:space-between;align-items:center}
+.logo{font-weight:bold;font-size:22px;color:#ff444f}
+.logo span{color:#22c55e}
+.balance{background:#1f2937;padding:8px 12px;border-radius:8px;font-size:14px;text-align:right}
+.btn{background:#ff444f;color:white;border:none;padding:10px 16px;border-radius:8px;font-weight:bold}
+.card{background:#111827;margin:12px;border-radius:12px;padding:16px}
+.price{font-size:34px;font-weight:bold}
+.coinlist{display:flex;gap:10px;overflow-x:auto;padding:0 12px}
+.coin{background:#111827;padding:12px;border-radius:10px;min-width:140px;cursor:pointer;border:2px solid transparent}
+.coin.active{border-color:#ff444f}
+input,select{width:100%;padding:12px;border-radius:8px;border:none;margin:8px 0;background:#1f2937;color:white;box-sizing:border-box}
+.btn-buy{background:#22c55e;color:white;border:none;padding:14px;border-radius:8px;width:48%;font-weight:bold}
+.btn-sell{background:#ef4444;color:white;border:none;padding:14px;border-radius:8px;width:48%;font-weight:bold}
+.flex{display:flex;gap:10px}
+.trade{background:#1f2937;padding:12px;border-radius:8px;margin:8px 0}
+</style>
+</head>
+<body>
+<header>
+<div class="logo">Boke<span>cfx</span></div>
+<div id="authArea"><button class="btn" onclick="loginDeriv()">Login with Deriv</button></div>
+</header>
+<div style="text-align:center;padding:8px;background:#1f2937;font-size:13px">Balance: $<b id="balance">-- Demo --</b> | <span id="acc">Not logged in - Demo Mode</span></div>
+<div class="coinlist" id="coinlist"></div>
+<div class="card">
+<h2 id="coinName" style="margin:0">Volatility 75 Index</h2>
+<div class="price" id="price">Loading live Deriv price...</div>
+<p style="color:#9ca3af;font-size:13px">LIVE via Deriv API • App: Bokecfx</p>
+<canvas id="chart" height="180"></canvas>
+</div>
+<div class="card">
+<h3 style="margin:0">Trade - Multipliers</h3>
+<label>Amount (USD)</label>
+<input id="amount" type="number" value="10">
+<label>Multiplier</label>
+<select id="mult"><option>x10</option><option>x50</option><option selected>x100</option><option>x200</option><option>x500</option></select>
+<div class="flex">
+<button class="btn-buy" onclick="trade('UP')">BUY UP ↑</button>
+<button class="btn-sell" onclick="trade('DOWN')">SELL DOWN ↓</button>
+</div>
+<p id="msg" style="text-align:center"></p>
+<p style="font-size:12px;color:#9ca3af;text-align:center">Demo until you login. After login, trades are REAL on your Deriv account.</p>
+</div>
+<div class="card">
+<h3 style="margin:0">Open Positions</h3>
+<div id="positions">No open trades. Login to see real positions.</div>
+</div>
+<script>
+const APP_ID = '34YfX3z9Tybzf6jKsirXc';
+const REDIRECT = 'https://bokecfx.netlify.app';
+let assets = [
+  {symbol:'R_75', name:'Volatility 75 Index', price:0, history:[]},
+  {symbol:'R_100', name:'Volatility 100 Index', price:0, history:[]},
+  {symbol:'frxEURUSD', name:'EUR/USD', price:0, history:[]},
+  {symbol:'frxGBPUSD', name:'GBP/USD', price:0, history:[]},
+  {symbol:'frxUSDJPY', name:'USD/JPY', price:0, history:[]},
+  {symbol:'frxXAUUSD', name:'Gold (XAU/USD)', price:0, history:[]},
+];
+let selected = 0;
+let chart; let ws;
+let token = localStorage.getItem('deriv_token');
+let demoBalance = 10000;
+function loginDeriv(){ window.location.href = `https://oauth.deriv.com/oauth2/authorize?app_id=${APP_ID}&l=en&brand=deriv`; }
+function checkUrlToken(){
+  let p = new URLSearchParams(window.location.search);
+  let t1 = p.get('token1');
+  if(t1){ localStorage.setItem('deriv_token', t1); token=t1; window.history.replaceState({},'',REDIRECT); }
+}
+checkUrlToken();
+function connect(){
+  ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`);
+  ws.onopen = ()=>{
+    assets.forEach(a=> ws.send(JSON.stringify({ticks:a.symbol, subscribe:1})));
+    if(token) ws.send(JSON.stringify({authorize: token}));
+  };
+  ws.onmessage = (msg)=>{
+    let d = JSON.parse(msg.data);
+    if(d.msg_type==='tick'){
+      let a = assets.find(x=>x.symbol===d.tick.symbol);
+      if(a){ a.price = parseFloat(d.tick.quote); a.history.push(a.price); if(a.history.length>30) a.history.shift(); render(); }
+    }
+    if(d.msg_type==='authorize'){
+      if(d.authorize){
+        document.getElementById('balance').innerText = d.authorize.balance.toLocaleString();
+        document.getElementById('acc').innerText = d.authorize.loginid + ' • ' + d.authorize.currency + ' • REAL';
+        document.getElementById('authArea').innerHTML = `<button class="btn" style="background:#374151" onclick="logout()">Logout ${d.authorize.loginid}</button>`;
+        ws.send(JSON.stringify({portfolio:1, subscribe:1}));
+      }
+    }
+    if(d.msg_type==='portfolio'){
+      let pos = document.getElementById('positions');
+      if(!d.portfolio || !d.portfolio.contracts.length) pos.innerHTML='No open real trades.';
+      else pos.innerHTML = d.portfolio.contracts.map(c=>`<div class="trade"><b>${c.symbol} ${c.contract_type}</b><br>Buy: $${c.buy_price} | Payout: $${c.payout}<br><button onclick="sellContract('${c.contract_id}', ${c.bid_price})" style="background:#22c55e;color:white;border:none;padding:8px;width:100%;border-radius:6px">Sell for $${c.bid_price}</button></div>`).join('');
+    }
+    if(d.msg_type==='buy'){ if(d.buy) alert('Trade opened! Contract ID: '+d.buy.contract_id); if(d.error) alert(d.error.message); }
+  };
+}
+function render(){
+  document.getElementById('coinlist').innerHTML = assets.map((c,i)=>`<div class="coin ${i===selected?'active':''}" onclick="selectCoin(${i})"><b>${c.symbol}</b><br>${c.name}<br>$${c.price.toLocaleString(undefined,{maximumFractionDigits:4})}</div>`).join('');
+  let c = assets[selected];
+  document.getElementById('coinName').innerText = c.name + ' ('+c.symbol+')';
+  document.getElementById('price').innerText = '$'+c.price.toLocaleString(undefined,{maximumFractionDigits:4});
+  if(!token) document.getElementById('balance').innerText = demoBalance.toLocaleString() + ' DEMO';
+  if(chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {type:'line', data:{labels:c.history.map((_,[STRIPPED] datasets:[{data:c.history, borderColor:'#ff444f', fill:true, backgroundColor:'rgba(255,68,79,0.1)', tension:0.4, pointRadius:0}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#1f2937'}, ticks:{color:'white'}}}}});
+}
+function selectCoin(i){ selected=i; render(); }
+function logout(){ localStorage.removeItem('deriv_token'); location.reload(); }
+function sellContract(id, price){ ws.send(JSON.stringify({sell:id, price:price})); alert('Sell sent - check portfolio'); }
+function trade(dir){
+  let amt = parseFloat(document.getElementById('amount').value);
+  let mult = parseInt(document.getElementById('mult').value.replace('x',''));
+  let sym = assets[selected].symbol;
+  if(!token){ alert('DEMO: '+dir+' '+sym+' $'+amt+' x'+mult+'\n\nLogin with Deriv to place REAL trade.'); return; }
+  let type = dir==='UP' ? 'MULTUP' : 'MULTDOWN';
+  ws.send(JSON.stringify({buy:1, price:amt, parameters:{amount:amt, basis:'stake', contract_type:type, currency:'USD', symbol:sym, multiplier:mult}}));
+  document.getElementById('msg').innerText = 'Sending '+type+' to Deriv...';
+}
+connect();
+</script>
+</body>
+</html>
