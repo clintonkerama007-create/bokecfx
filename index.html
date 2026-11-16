@@ -85,9 +85,7 @@ function connect(){
     let d = JSON.parse(msg.data);
     if(d.msg_type==='tick'){
       let a = assets.find(x=>x.symbol===d.tick.symbol);
-      if(a){ a.price = parseFloat(d.tick.quote); a.history.push(a.price); if(a.history.length>30) a.history.shift(); render(); }
-    }
-    if(d.msg_type==='authorize'){
+     if(a){ a.price = parseFloat(d.tick.quote); render(); }    if(d.msg_type==='authorize'){
       if(d.authorize){
         document.getElementById('balance').innerText = d.authorize.balance.toLocaleString();
         document.getElementById('acc').innerText = d.authorize.loginid + ' • ' + d.authorize.currency + ' • REAL';
@@ -124,6 +122,7 @@ function trade(dir){
   ws.send(JSON.stringify({buy:1, price:amt, parameters:{amount:amt, basis:'stake', contract_type:type, currency:'USD', symbol:sym, multiplier:mult}}));
   document.getElementById('msg').innerText = 'Sending '+type+' to Deriv...';
 }
+render();
 connect();
 </script>
 </body>
