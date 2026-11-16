@@ -76,7 +76,7 @@ function checkUrlToken(){
 }
 checkUrlToken();
 function connect(){
-  ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`);
+  ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
   ws.onopen = ()=>{
     assets.forEach(a=> ws.send(JSON.stringify({ticks:a.symbol, subscribe:1})));
     if(token) ws.send(JSON.stringify({authorize: token}));
