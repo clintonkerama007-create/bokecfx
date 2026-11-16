@@ -105,7 +105,7 @@ function render(){
   document.getElementById('coinlist').innerHTML = assets.map((c,i)=>`<div class="coin ${i===selected?'active':''}" onclick="selectCoin(${i})"><b>${c.symbol}</b><br>${c.name}<br>$${c.price.toLocaleString(undefined,{maximumFractionDigits:4})}</div>`).join('');
   let c = assets[selected];
   document.getElementById('coinName').innerText = c.name + ' ('+c.symbol+')';
-  document.getElementById('price').innerText = '$'+c.price.toLocaleString(undefined,{maximumFractionDigits:4});
+  document.getElementById('price').innerText = c.price ? '$'+c.price.toFixed(2) : 'Loading...';
   if(!token) document.getElementById('balance').innerText = demoBalance.toLocaleString() + ' DEMO';
   if(chart) chart.destroy();
   chart = new Chart(document.getElementById('chart'), {type:'line', data:{labels:c.history.map((_,[STRIPPED] datasets:[{data:c.history, borderColor:'#ff444f', fill:true, backgroundColor:'rgba(255,68,79,0.1)', tension:0.4, pointRadius:0}]}, options:{plugins:{legend:{display:false}}, scales:{x:{display:false}, y:{grid:{color:'#1f2937'}, ticks:{color:'white'}}}}});
